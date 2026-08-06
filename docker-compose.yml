@@ -79,7 +79,7 @@ services:
 
   migrate:
     build:
-      context: ./backend_fixed
+      context: ./backend
       dockerfile: Dockerfile
     image: ai-order-supervisor-backend:${APP_IMAGE_TAG:-local}
     restart: "no"

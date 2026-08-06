@@ -3,7 +3,7 @@
 Scope: validate the complete path `Postgres -> Temporal -> Worker -> FastAPI -> Next.js frontend` for the existing AI Order Supervisor system.
 
 Related apps:
-- Backend: `/Users/anishagupta/Desktop/backend/backend_fixed`
+- Backend: `/Users/anishagupta/Desktop/backend/backend`
 - Frontend: `/Users/anishagupta/Desktop/backend/order-supervisor-frontend`
 - Docker Compose: `/Users/anishagupta/Desktop/backend/docker-compose.yml`
 

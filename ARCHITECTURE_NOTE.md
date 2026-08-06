@@ -27,23 +27,23 @@ PostgreSQL read model
 
 - `order-supervisor-frontend/`
   - Next.js UI for supervisors, runs, timeline, events, instructions, and workflow controls.
-- `backend_fixed/main.py`
+- `backend/main.py`
   - FastAPI app entrypoint.
-- `backend_fixed/api/routers/supervisors.py`
+- `backend/api/routers/supervisors.py`
   - Supervisor config endpoints.
-- `backend_fixed/api/routers/runs.py`
+- `backend/api/routers/runs.py`
   - Run lifecycle endpoints. Starts workflows, sends signals, and queries state.
-- `backend_fixed/workflows/order_supervisor.py`
+- `backend/workflows/order_supervisor.py`
   - Temporal workflow. Owns durable order state, sleeps, wakes, processes signals, and terminates.
-- `backend_fixed/worker.py`
+- `backend/worker.py`
   - Temporal worker entrypoint. Registers workflows and activities.
-- `backend_fixed/activities/agent.py`
+- `backend/activities/agent.py`
   - LLM-backed event classification, agent decisions, memory updates, and final summaries.
-- `backend_fixed/activities/tools.py`
+- `backend/activities/tools.py`
   - Mocked operational tools such as customer messages, internal notes, review flags, wake scheduling, escalation, and close workflow.
-- `backend_fixed/activities/persistence.py`
+- `backend/activities/persistence.py`
   - Persists workflow snapshots, events, and actions to Postgres.
-- `backend_fixed/db/models.py`
+- `backend/db/models.py`
   - SQLAlchemy models for supervisors, runs, events, and actions.
 
 ## Runtime Flow

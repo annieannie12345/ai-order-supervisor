@@ -93,7 +93,7 @@ Because of that, these full-stack checks could not be honestly completed:
 Command:
 
 ```bash
-/Users/anishagupta/Desktop/backend/backend_fixed/.venv/bin/python -m compileall -q .
+/Users/anishagupta/Desktop/backend/backend/.venv/bin/python -m compileall -q .
 ```
 
 Result: pass.
@@ -106,7 +106,7 @@ Observed:
 Command:
 
 ```bash
-/Users/anishagupta/Desktop/backend/backend_fixed/.venv/bin/python - <<'PY'
+/Users/anishagupta/Desktop/backend/backend/.venv/bin/python - <<'PY'
 from fastapi.testclient import TestClient
 from main import app
 client = TestClient(app)
@@ -125,7 +125,7 @@ Observed:
 Command:
 
 ```bash
-/Users/anishagupta/Desktop/backend/backend_fixed/.venv/bin/python - <<'PY'
+/Users/anishagupta/Desktop/backend/backend/.venv/bin/python - <<'PY'
 from main import app
 schema = app.openapi()
 for path, item in sorted(schema['paths'].items()):

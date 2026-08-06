@@ -78,7 +78,7 @@ actions(id, run_id, ts, type, payload jsonb)
 
 ### Docker Compose quickstart
 
-From the parent folder that contains both `backend_fixed/` and
+From the parent folder that contains both `backend/` and
 `order-supervisor-frontend/`:
 
 ```bash
