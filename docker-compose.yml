@@ -1,0 +1,212 @@
+name: ai-order-supervisor
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-order_supervisor}
+    ports:
+      - "${POSTGRES_BIND_ADDR:-127.0.0.1}:${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - order-supervisor
+
+  temporal:
+    image: temporalio/auto-setup:${TEMPORAL_IMAGE_TAG:-1.29.1}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PWD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_SEEDS: postgres
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/docker.yaml
+    ports:
+      - "${TEMPORAL_BIND_ADDR:-127.0.0.1}:${TEMPORAL_HOST_PORT:-7233}:7233"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "tctl --address temporal:7233 cluster health | grep -q SERVING"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      - order-supervisor
+
+  temporal-ui:
+    image: temporalio/ui:${TEMPORAL_UI_IMAGE_TAG:-2.49.1}
+    restart: unless-stopped
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: ${TEMPORAL_UI_CORS_ORIGINS:-http://localhost:3000}
+    ports:
+      - "${TEMPORAL_UI_BIND_ADDR:-127.0.0.1}:${TEMPORAL_UI_HOST_PORT:-8233}:8080"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q --spider http://127.0.0.1:8080 || curl -fsS http://127.0.0.1:8080 >/dev/null"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - order-supervisor
+
+  migrate:
+    build:
+      context: ./backend_fixed
+      dockerfile: Dockerfile
+    image: ai-order-supervisor-backend:${APP_IMAGE_TAG:-local}
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:postgres@postgres:5432/order_supervisor}
+      DB_ECHO: ${DB_ECHO:-false}
+    command: ["alembic", "upgrade", "head"]
+    networks:
+      - order-supervisor
+
+  backend:
+    image: ai-order-supervisor-backend:${APP_IMAGE_TAG:-local}
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      temporal:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:postgres@postgres:5432/order_supervisor}
+      DB_ECHO: ${DB_ECHO:-false}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
+      TEMPORAL_TARGET_HOST: ${TEMPORAL_TARGET_HOST:-temporal:7233}
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      TEMPORAL_TLS_ENABLED: ${TEMPORAL_TLS_ENABLED:-false}
+      TEMPORAL_TLS_CLIENT_CERT: ${TEMPORAL_TLS_CLIENT_CERT:-}
+      TEMPORAL_TLS_CLIENT_KEY: ${TEMPORAL_TLS_CLIENT_KEY:-}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-["http://localhost:3000","http://127.0.0.1:3000"]}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${BACKEND_BIND_ADDR:-127.0.0.1}:${BACKEND_HOST_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)\""
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    networks:
+      - order-supervisor
+
+  worker:
+    image: ai-order-supervisor-backend:${APP_IMAGE_TAG:-local}
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      temporal:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:postgres@postgres:5432/order_supervisor}
+      DB_ECHO: ${DB_ECHO:-false}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
+      TEMPORAL_TARGET_HOST: ${TEMPORAL_TARGET_HOST:-temporal:7233}
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      TEMPORAL_TLS_ENABLED: ${TEMPORAL_TLS_ENABLED:-false}
+      TEMPORAL_TLS_CLIENT_CERT: ${TEMPORAL_TLS_CLIENT_CERT:-}
+      TEMPORAL_TLS_CLIENT_KEY: ${TEMPORAL_TLS_CLIENT_KEY:-}
+      WORKER_MAX_CONCURRENT_ACTIVITIES: ${WORKER_MAX_CONCURRENT_ACTIVITIES:-40}
+      WORKER_MAX_CONCURRENT_WORKFLOW_TASKS: ${WORKER_MAX_CONCURRENT_WORKFLOW_TASKS:-100}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["python", "worker.py"]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import asyncio; exec(\\\"async def main():\\\\n from client import get_temporal_client\\\\n from db.session import async_session_factory\\\\n from sqlalchemy import text\\\\n await get_temporal_client()\\\\n async with async_session_factory() as session:\\\\n  await session.execute(text('select 1'))\\\"); asyncio.run(main())\""
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - order-supervisor
+
+  frontend:
+    build:
+      context: ./order-supervisor-frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    image: ai-order-supervisor-frontend:${APP_IMAGE_TAG:-local}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      PORT: 3000
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "${FRONTEND_BIND_ADDR:-127.0.0.1}:${FRONTEND_HOST_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - order-supervisor
+
+volumes:
+  postgres_data:
+    name: order_supervisor_postgres_data
+
+networks:
+  order-supervisor:
+    name: order_supervisor_network
+    driver: bridge
