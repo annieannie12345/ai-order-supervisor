@@ -2,6 +2,10 @@
 
 An event-driven, LLM-powered order supervisor built on **Temporal**, **FastAPI**, and **Postgres**. Each order gets one long-lived `OrderSupervisorWorkflow` that wakes on start, on external events (signals), or on a self-scheduled timer — runs an agent step — and goes back to sleep.
 
+## Final Demo Video
+
+[Watch the final demo video](./Final_video.mp4)
+
 ---
 
 ## Submission Quick Start
